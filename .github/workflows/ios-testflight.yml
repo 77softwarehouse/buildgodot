@@ -34,7 +34,10 @@ jobs:
           curl -L -o "$GODOT_DIR/templates.tpz" "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-${GODOT_RELEASE}/Godot_v${GODOT_VERSION}-${GODOT_RELEASE}_export_templates.tpz"
           TEMPLATE_DIR="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION}.${GODOT_RELEASE}"
           mkdir -p "$TEMPLATE_DIR"
-          unzip -q "$GODOT_DIR/templates.tpz" -d "$TEMPLATE_DIR"
+          TEMPLATE_STAGING="$GODOT_DIR/templates"
+          mkdir -p "$TEMPLATE_STAGING"
+          unzip -q "$GODOT_DIR/templates.tpz" -d "$TEMPLATE_STAGING"
+          cp -R "$TEMPLATE_STAGING/templates/." "$TEMPLATE_DIR"
 
       - name: Export Xcode project
         run: |

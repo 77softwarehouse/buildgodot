@@ -45,6 +45,47 @@ jobs:
           mkdir -p build/ios
           ./.godot/godot --headless --path . --export-release "iOS" build/ios/buildgodot.xcodeproj
 
+      - name: Force manual signing settings
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          pbxproj = Path("build/ios/buildgodot.xcodeproj/project.pbxproj")
+          text = pbxproj.read_text()
+
+          team_id = os.environ["IOS_TEAM_ID"]
+          bundle_id = os.environ["IOS_BUNDLE_ID"]
+          profile = os.environ["IOS_PROVISION_PROFILE_NAME"]
+
+          def update_block(block):
+              lines = block.splitlines()
+
+              def set_key(key, value):
+                  key_prefix = f"{key} = "
+                  for i, line in enumerate(lines):
+                      if line.strip().startswith(key_prefix):
+                          lines[i] = re.sub(rf"{re.escape(key)} = .*?;", f"{key} = {value};", line)
+                          return
+                  lines.append(f"\t\t\t\t{key} = {value};")
+
+              set_key("CODE_SIGN_STYLE", "Manual")
+              set_key("CODE_SIGN_IDENTITY", '"Apple Distribution"')
+              set_key("DEVELOPMENT_TEAM", f'"{team_id}"')
+              set_key("PRODUCT_BUNDLE_IDENTIFIER", f'"{bundle_id}"')
+              set_key("PROVISIONING_PROFILE_SPECIFIER", f'"{profile}"')
+              return "\n".join(lines)
+
+          def repl(match):
+              inner = match.group(1)
+              return "buildSettings = {\n" + update_block(inner) + "\n\t\t};"
+
+          text = re.sub(r"buildSettings = \\{\n(.*?)\n\\t\\t\\};", repl, text, flags=re.DOTALL)
+          pbxproj.write_text(text)
+          PY
+
       - name: Install signing assets
         env:
           IOS_DIST_P12_BASE64: ${{ secrets.IOS_DIST_P12_BASE64 }}

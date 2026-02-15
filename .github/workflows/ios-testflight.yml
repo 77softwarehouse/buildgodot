@@ -81,11 +81,85 @@ jobs:
           sed -i '' "s|IOS_SHORT_VERSION|$IOS_SHORT_VERSION|g" export_presets.cfg
           sed -i '' "s|IOS_VERSION|$IOS_VERSION|g" export_presets.cfg
 
-      - name: Export and build IPA
+      - name: Export Xcode project
         run: |
           set -euo pipefail
-          mkdir -p build
-          ./.godot/godot --headless --path . --export-release "iOS"
+          mkdir -p build/ios
+          ./.godot/godot --headless --path . --export-release "iOS" build/ios/buildgodot.xcodeproj
+
+      - name: Force manual signing in project
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re
+          from pathlib import Path
+          pbxproj = Path("build/ios/buildgodot.xcodeproj/project.pbxproj")
+          text = pbxproj.read_text()
+          team_id = os.environ["IOS_APPSTORE_TEAM_ID"]
+          bundle_id = os.environ["IOS_BUNDLE_ID"]
+          profile = os.environ["IOS_PROVISION_PROFILE_NAME"]
+          def update_block(block):
+              lines = block.splitlines()
+              def set_key(key, value):
+                  key_prefix = f"{key} = "
+                  for i, line in enumerate(lines):
+                      if line.strip().startswith(key_prefix):
+                          lines[i] = re.sub(rf"{re.escape(key)} = .*?;", f"{key} = {value};", line)
+                          return
+                  lines.append(f"\t\t\t\t{key} = {value};")
+              set_key("CODE_SIGN_STYLE", "Manual")
+              set_key("CODE_SIGN_IDENTITY", '"Apple Distribution"')
+              set_key("DEVELOPMENT_TEAM", f'"{team_id}"')
+              set_key("PRODUCT_BUNDLE_IDENTIFIER", f'"{bundle_id}"')
+              set_key("PROVISIONING_PROFILE_SPECIFIER", f'"{profile}"')
+              return "\n".join(lines)
+          def repl(match):
+              inner = match.group(1)
+              return "buildSettings = {\n" + update_block(inner) + "\n\t\t};"
+          text = re.sub(r"buildSettings = \{\n(.*?)\n\s*\};", repl, text, flags=re.DOTALL)
+          pbxproj.write_text(text)
+          PY
+
+      - name: Build and archive
+        run: |
+          set -euo pipefail
+          xcodebuild -project build/ios/buildgodot.xcodeproj \
+            -scheme buildgodot -configuration Release \
+            -archivePath build/ios/buildgodot.xcarchive \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="$IOS_APPSTORE_TEAM_ID" \
+            PROVISIONING_PROFILE_SPECIFIER="$IOS_PROVISION_PROFILE_NAME" \
+            PRODUCT_BUNDLE_IDENTIFIER="$IOS_BUNDLE_ID" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            archive
+
+      - name: Export IPA
+        run: |
+          set -euo pipefail
+          EXPORT_PLIST="$RUNNER_TEMP/exportOptions.plist"
+          cat > "$EXPORT_PLIST" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>teamID</key>
+            <string>$IOS_APPSTORE_TEAM_ID</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>$IOS_BUNDLE_ID</key>
+              <string>$IOS_PROVISION_PROFILE_NAME</string>
+            </dict>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath build/ios/buildgodot.xcarchive \
+            -exportPath build/ios/export \
+            -exportOptionsPlist "$EXPORT_PLIST"
 
       - name: Upload to TestFlight
         env:
@@ -97,4 +171,4 @@ jobs:
           mkdir -p "$HOME/private_keys"
           KEY_PATH="$HOME/private_keys/AuthKey_${APPSTORE_API_KEY_ID}.p8"
           printf "%s" "$APPSTORE_API_PRIVATE_KEY" > "$KEY_PATH"
-          xcrun altool --upload-app -f build/${PROJECT_NAME}.ipa -t ios --apiKey "$APPSTORE_API_KEY_ID" --apiIssuer "$APPSTORE_API_ISSUER_ID"
+          xcrun altool --upload-app -f build/ios/export/${PROJECT_NAME}.ipa -t ios --apiKey "$APPSTORE_API_KEY_ID" --apiIssuer "$APPSTORE_API_ISSUER_ID"

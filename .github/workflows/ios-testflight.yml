@@ -82,7 +82,7 @@ jobs:
               inner = match.group(1)
               return "buildSettings = {\n" + update_block(inner) + "\n\t\t};"
 
-          text = re.sub(r"buildSettings = \\{\n(.*?)\n\\t\\t\\};", repl, text, flags=re.DOTALL)
+          text = re.sub(r"buildSettings = \{\n(.*?)\n[\t ]*\};", repl, text, flags=re.DOTALL)
           pbxproj.write_text(text)
           PY
 

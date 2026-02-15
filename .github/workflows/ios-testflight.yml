@@ -82,7 +82,9 @@ jobs:
               inner = match.group(1)
               return "buildSettings = {\n" + update_block(inner) + "\n\t\t};"
 
-          text = re.sub(r"buildSettings = \{\n(.*?)\n[\t ]*\};", repl, text, flags=re.DOTALL)
+          # Match all buildSettings blocks (project + target configs) - Godot may use
+          # Automatic signing; we must force Manual for CI/TestFlight
+          text = re.sub(r"buildSettings = \{\n(.*?)\n\s*\};", repl, text, flags=re.DOTALL)
           pbxproj.write_text(text)
           PY
 

@@ -19,7 +19,7 @@ env:
   IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
   IOS_PROVISION_PROFILE_NAME: ${{ secrets.IOS_PROVISION_PROFILE_NAME }}
   IOS_SHORT_VERSION: "1.0"
-  IOS_VERSION: "1"
+  IOS_VERSION: ${{ github.run_number }}
 
 jobs:
   deploy:

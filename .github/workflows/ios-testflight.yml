@@ -29,6 +29,9 @@ jobs:
       - name: Checkout source code
         uses: actions/checkout@v4
 
+      - name: Select Xcode 16 (iOS 18 SDK required for App Store)
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+
       - name: Install the Apple certificate and provisioning profile
         run: |
           set -euo pipefail
